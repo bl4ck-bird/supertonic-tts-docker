@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SuperTonic 3 TTS — Test Console</title>
+<style>
+  :root { color-scheme: light dark; --gap: 14px; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+         margin: 0; padding: 24px; max-width: 760px; margin-inline: auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { opacity: .7; margin: 0 0 20px; font-size: .9rem; }
+  .sub a { color: inherit; }
+  label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: 4px; }
+  textarea, select, input { width: 100%; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+    background: transparent; color: inherit; font: inherit; }
+  textarea { min-height: 96px; resize: vertical; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--gap); margin-bottom: var(--gap); }
+  .field { margin-bottom: var(--gap); }
+  .range-val { font-weight: 400; opacity: .7; }
+  button { padding: 10px 18px; border-radius: 8px; border: 0; cursor: pointer;
+    font: inherit; font-weight: 600; background: #4f46e5; color: #fff; }
+  button:disabled { opacity: .5; cursor: progress; }
+  audio { width: 100%; margin-top: 16px; }
+  .status { margin-top: 12px; font-size: .85rem; min-height: 1.2em; }
+  .status.err { color: #dc2626; }
+  .dl { margin-top: 8px; font-size: .85rem; }
+</style>
+</head>
+<body>
+  <h1>SuperTonic 3 — TTS Test Console</h1>
+  <p class="sub">Native <code>/v1/tts</code> endpoint · <a href="/docs">Swagger docs</a></p>
+
+  <div class="field">
+    <label for="text">Text</label>
+    <textarea id="text" placeholder="Type something to synthesize…">SuperTonic is lightning fast.</textarea>
+  </div>
+
+  <div class="row">
+    <div>
+      <label for="voice">Voice</label>
+      <select id="voice"></select>
+    </div>
+    <div>
+      <label for="lang">Language</label>
+      <select id="lang">
+        <option value="na">auto (na)</option>
+        <option value="en" selected>en</option>
+        <option value="ko">ko</option>
+        <option value="ja">ja</option>
+        <option value="zh">zh</option>
+        <option value="es">es</option>
+        <option value="fr">fr</option>
+        <option value="de">de</option>
+      </select>
+    </div>
+    <div>
+      <label for="format">Format</label>
+      <select id="format"></select>
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label for="speed">Speed <span class="range-val" id="speedVal">1.05</span></label>
+      <input type="range" id="speed" min="0.7" max="2.0" step="0.05" value="1.05" />
+    </div>
+    <div>
+      <label for="steps">Steps <span class="range-val" id="stepsVal">8</span></label>
+      <input type="range" id="steps" min="1" max="20" step="1" value="8" />
+    </div>
+    <div>
+      <label for="silence">Silence <span class="range-val" id="silenceVal">0.30</span></label>
+      <input type="range" id="silence" min="0" max="2" step="0.05" value="0.3" />
+    </div>
+  </div>
+
+  <button id="go">Synthesize</button>
+  <div class="status" id="status"></div>
+  <audio id="player" controls hidden></audio>
+  <div class="dl" id="dl"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const bind = (id, valId, fmt = (v) => v) => {
+  const el = $(id), out = $(valId);
+  el.addEventListener("input", () => (out.textContent = fmt(el.value)));
+};
+bind("speed", "speedVal", (v) => Number(v).toFixed(2));
+bind("steps", "stepsVal");
+bind("silence", "silenceVal", (v) => Number(v).toFixed(2));
+
+let lastUrl = null;
+
+function fillSelect(sel, values) {
+  sel.innerHTML = "";
+  values.forEach((v) => {
+    const o = document.createElement("option");
+    o.value = o.textContent = v;
+    sel.appendChild(o);
+  });
+}
+
+async function loadVoices() {
+  try {
+    const res = await fetch("/v1/voices");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    fillSelect($("voice"), data.voices || []);
+  } catch (e) {
+    $("status").textContent = "Could not load voices: " + e.message;
+    $("status").className = "status err";
+  }
+}
+
+async function loadFormats() {
+  // The minimal image supports wav/pcm; the :ffmpeg image adds compressed
+  // formats. /v1/health reports which are available.
+  let formats = ["wav", "pcm"];
+  try {
+    const res = await fetch("/v1/health");
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.formats) && data.formats.length) formats = data.formats;
+    }
+  } catch {}
+  fillSelect($("format"), formats);
+}
+
+async function synthesize() {
+  const btn = $("go"), status = $("status");
+  btn.disabled = true;
+  status.className = "status";
+  status.textContent = "Synthesizing…";
+  if (lastUrl) { URL.revokeObjectURL(lastUrl); lastUrl = null; }
+  const body = {
+    text: $("text").value,
+    voice: $("voice").value,
+    lang: $("lang").value,
+    speed: parseFloat($("speed").value),
+    steps: parseInt($("steps").value, 10),
+    silence_duration: parseFloat($("silence").value),
+    response_format: $("format").value,
+  };
+  const t0 = performance.now();
+  try {
+    const res = await fetch("/v1/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let detail = "HTTP " + res.status;
+      try { detail = (await res.json()).detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    const blob = await res.blob();
+    lastUrl = URL.createObjectURL(blob);
+    const player = $("player");
+    player.src = lastUrl;
+    player.hidden = false;
+    const ms = Math.round(performance.now() - t0);
+    const dur = res.headers.get("X-Audio-Duration");
+    status.textContent = `Done in ${ms} ms` + (dur ? ` · ${dur}s audio` : "");
+    $("dl").innerHTML =
+      `<a href="${lastUrl}" download="supertonic.${body.response_format}">Download</a>`;
+    player.play().catch(() => {});
+  } catch (e) {
+    status.className = "status err";
+    status.textContent = "Error: " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$("go").addEventListener("click", synthesize);
+loadVoices();
+loadFormats();
+</script>
+</body>
+</html>

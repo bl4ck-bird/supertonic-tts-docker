@@ -1,0 +1,137 @@
+name: build-and-push
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+# Serialize runs so the CalVer same-day counter probes a stable registry state
+# (no two builds racing for the same date tag). Queue rather than cancel, so an
+# in-progress push still completes and gets its dated tag.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write # cargo audit (rustsec/audit-check) posts a check run
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable # SHA pin can't derive the channel from the ref
+          components: clippy
+
+      - run: cargo test --locked --bin supertonic
+      # Gate on warnings: our code is clippy-clean and the vendored helper.rs is
+      # suppressed at its `mod` declaration, so any new warning fails the build.
+      - run: cargo clippy --locked --bin supertonic -- -D warnings
+
+      # Report RustSec advisories. Non-blocking: the inference deps
+      # (ort/rand/ndarray) are pinned to the upstream helper.rs API and cannot be
+      # bumped on an advisory.
+      - name: cargo audit
+        uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+        continue-on-error: true
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # Image name is independent of the repo name: ghcr.io/<owner>/supertonic
+      # (lowercased — GHCR requires lowercase). The package is linked back to this
+      # repo via the org.opencontainers.image.source label on the images.
+      - name: Resolve image name
+        run: echo "IMAGE=${REGISTRY,,}/${GITHUB_REPOSITORY_OWNER,,}/supertonic" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      # Smoke-test the runtime image before publishing: a dynamically-linked musl
+      # binary that fails to start, or a missing onnxruntime .so, would otherwise
+      # ship green. amd64-only + load (the runner is amd64).
+      - name: Build minimal for smoke test
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          target: minimal
+          platforms: linux/amd64
+          load: true
+          tags: supertonic:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        run: |
+          docker run --rm supertonic:smoke --help
+          docker run --rm supertonic:smoke synth --help
+          # ort's load-dynamic dlopen's this at runtime; fail now if it is absent.
+          docker run --rm --entrypoint sh supertonic:smoke -c 'test -e "$ORT_DYLIB_PATH"'
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # CalVer with a same-day MICRO counter: first build of the day is
+      # :YYYY.MM.DD, the next :YYYY.MM.DD.2, etc. (probed against the registry).
+      # minimal and ffmpeg share the date tag; ffmpeg adds a -ffmpeg suffix.
+      # Login must precede this so the probe can read the (private) package.
+      - name: Compute image tags
+        id: tags
+        env:
+          DOCKER_CLI_EXPERIMENTAL: enabled
+        run: |
+          date=$(date -u +%Y.%m.%d)
+          tag="$date"; n=1
+          while docker manifest inspect "${IMAGE}:${tag}" >/dev/null 2>&1; do
+            n=$((n + 1)); tag="${date}.${n}"
+          done
+          echo "minimal=${IMAGE}:latest,${IMAGE}:${tag}" >> "$GITHUB_OUTPUT"
+          echo "ffmpeg=${IMAGE}:ffmpeg,${IMAGE}:${tag}-ffmpeg" >> "$GITHUB_OUTPUT"
+
+      # Minimal image (wav/pcm) -> :latest + dated :YYYY.MM.DD[.N]
+      - name: Build & push (minimal)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          target: minimal
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.minimal }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=SuperTonic 3 OpenAI-compatible TTS server (wav/pcm)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ffmpeg image (+ compressed formats) -> :ffmpeg + dated :YYYY.MM.DD[.N]-ffmpeg
+      - name: Build & push (ffmpeg)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          target: ffmpeg
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.ffmpeg }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=SuperTonic 3 OpenAI-compatible TTS server (+ffmpeg)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

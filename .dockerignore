@@ -1,0 +1,11 @@
+# Keep the build context small and reproducible.
+**/target
+.git
+.github
+.env
+.ai-harness
+*.wav
+*.flac
+*.ogg
+*.mp3
+assets/

@@ -1,0 +1,13 @@
+# Keep the SHA-pinned GitHub Actions current: Dependabot opens a monthly PR that
+# bumps each `uses:` SHA (and its `# version` comment) to the latest release.
+# Cargo is intentionally excluded — the inference deps (ort/rand/ndarray) are
+# pinned to the upstream helper.rs API and must not be auto-bumped.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

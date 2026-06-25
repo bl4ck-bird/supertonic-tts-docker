@@ -1,0 +1,23 @@
+# OS / editor cruft
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+target/
+assets/
+*.wav
+*.flac
+*.ogg
+*.mp3
+*.aac
+*.opus
+.ai-harness/
+.env
