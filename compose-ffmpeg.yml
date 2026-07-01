@@ -19,7 +19,7 @@ services:
     # All tunables are optional; defaults shown in comments. Override via your
     # shell env or a .env file beside this compose file.
     environment:
-      SUPERTONIC_THREADS: ${SUPERTONIC_THREADS:-} # OMP_NUM_THREADS for onnxruntime
+      SUPERTONIC_THREADS: ${SUPERTONIC_THREADS:-} # onnxruntime intra-op threads (unset = all cores)
       SUPERTONIC_HF_REPO: ${SUPERTONIC_HF_REPO:-} # model repo (default Supertone/supertonic-3)
       SUPERTONIC_HF_REVISION: ${SUPERTONIC_HF_REVISION:-} # model revision (default: pinned commit)
       SUPERTONIC_MAX_TEXT_BYTES: ${SUPERTONIC_MAX_TEXT_BYTES:-} # per-utterance input cap (default 4096)

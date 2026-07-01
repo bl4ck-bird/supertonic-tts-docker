@@ -806,6 +806,28 @@ pub fn load_voice_style(voice_style_paths: &[String], verbose: bool) -> Result<S
     })
 }
 
+/// Intra-op thread count from SUPERTONIC_THREADS, or None to keep the ONNX
+/// Runtime default (every physical core). Zero/unparseable values are ignored.
+fn intra_threads_from_env() -> Option<usize> {
+    std::env::var("SUPERTONIC_THREADS")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|&n| n > 0)
+}
+
+/// A `Session::builder()` with the intra-op thread pool bounded when configured.
+fn session_builder(intra_threads: Option<usize>) -> Result<ort::session::builder::SessionBuilder> {
+    let builder = Session::builder()?;
+    match intra_threads {
+        // with_intra_threads' error carries the (non-Send) builder back, which
+        // anyhow can't absorb via `?`; stringify it instead.
+        Some(n) => builder
+            .with_intra_threads(n)
+            .map_err(|e| anyhow::anyhow!("configure intra-op threads: {e}")),
+        None => Ok(builder),
+    }
+}
+
 /// Load TTS components
 pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool) -> Result<TextToSpeech> {
     if use_gpu {
@@ -820,13 +842,19 @@ pub fn load_text_to_speech(onnx_dir: &str, use_gpu: bool) -> Result<TextToSpeech
     let vector_est_path = format!("{}/vector_estimator.onnx", onnx_dir);
     let vocoder_path = format!("{}/vocoder.onnx", onnx_dir);
 
-    let dp_ort = Session::builder()?
+    // The runtime onnxruntime (load-dynamic, Alpine musl package) is built
+    // without OpenMP, so OMP_NUM_THREADS is ignored. The intra-op thread pool
+    // defaults to every physical core; SUPERTONIC_THREADS must be applied to
+    // the session builder directly to actually bound CPU use.
+    let intra_threads = intra_threads_from_env();
+
+    let dp_ort = session_builder(intra_threads)?
         .commit_from_file(&dp_path)?;
-    let text_enc_ort = Session::builder()?
+    let text_enc_ort = session_builder(intra_threads)?
         .commit_from_file(&text_enc_path)?;
-    let vector_est_ort = Session::builder()?
+    let vector_est_ort = session_builder(intra_threads)?
         .commit_from_file(&vector_est_path)?;
-    let vocoder_ort = Session::builder()?
+    let vocoder_ort = session_builder(intra_threads)?
         .commit_from_file(&vocoder_path)?;
 
     let unicode_indexer_path = format!("{}/unicode_indexer.json", onnx_dir);
