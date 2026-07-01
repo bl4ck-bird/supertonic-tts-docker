@@ -13,8 +13,10 @@ mod engine;
 mod validate;
 mod voice_store;
 // Vendored verbatim from upstream; it carries example-only helpers we don't
-// call, and we don't lint its style (clippy::all) — fixes belong upstream.
+// call, and we neither lint (clippy::all) nor reformat (rustfmt::skip) its
+// style — fixes belong upstream.
 #[allow(dead_code, clippy::all)]
+#[rustfmt::skip]
 mod helper;
 
 use std::net::SocketAddr;
@@ -70,7 +72,8 @@ async fn serve() -> ExitCode {
         .unwrap_or(8080);
 
     // The server needs both the onnx model and the voice styles present.
-    if let Err(e) = download::ensure_assets(Path::new(engine::ASSETS_DIR), &["onnx", "voice_styles"])
+    if let Err(e) =
+        download::ensure_assets(Path::new(engine::ASSETS_DIR), &["onnx", "voice_styles"])
     {
         return fatal(format!("asset download: {e}"));
     }
@@ -87,8 +90,14 @@ async fn serve() -> ExitCode {
     );
 
     let ffmpeg = audio::ffmpeg_available();
-    tracing::info!("ffmpeg available: {ffmpeg} (compressed formats {})",
-        if ffmpeg { "enabled" } else { "disabled — wav/pcm only" });
+    tracing::info!(
+        "ffmpeg available: {ffmpeg} (compressed formats {})",
+        if ffmpeg {
+            "enabled"
+        } else {
+            "disabled — wav/pcm only"
+        }
+    );
 
     let state = api::AppState::new(Arc::new(engine), ffmpeg);
     let app = api::router(state);

@@ -7,13 +7,7 @@
 
 use std::sync::Arc;
 
-use axum::{
-    body::Body,
-    extract::State,
-    http::header,
-    response::Response,
-    Json,
-};
+use axum::{body::Body, extract::State, http::header, response::Response, Json};
 use base64::Engine as _;
 use serde_json::{json, Value};
 use utoipa::OpenApi;
@@ -34,7 +28,11 @@ struct Rendered {
 }
 
 /// Blocking: synthesize then encode. Call via [`render_async`] from handlers.
-fn render(engine: &Engine, params: SynthParams, response_format: &str) -> Result<Rendered, AppError> {
+fn render(
+    engine: &Engine,
+    params: SynthParams,
+    response_format: &str,
+) -> Result<Rendered, AppError> {
     let (samples, duration) = engine.synthesize(&params)?;
     let (bytes, media) = audio::encode(&samples, engine.sample_rate(), response_format)?;
     Ok(Rendered {
@@ -77,7 +75,11 @@ fn lang_or_auto(lang: Option<String>) -> String {
 /// Hold the returned permit until the blocking work finishes (it releases on
 /// drop), bounding how many requests pile up on the serial model.
 fn acquire(state: &AppState) -> Result<tokio::sync::OwnedSemaphorePermit, AppError> {
-    state.sem.clone().try_acquire_owned().map_err(|_| AppError::busy())
+    state
+        .sem
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| AppError::busy())
 }
 
 /// Maximum items in one batch request (each is a full serialized synthesis).
@@ -92,7 +94,12 @@ const DEFAULT_MAX_BATCH_TEXT_BYTES: usize = 50_000;
 /// Aggregate batch input cap (bytes), read once from the environment.
 fn max_batch_text_bytes() -> usize {
     static V: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    *V.get_or_init(|| crate::validate::env_usize("SUPERTONIC_MAX_BATCH_TEXT_BYTES", DEFAULT_MAX_BATCH_TEXT_BYTES))
+    *V.get_or_init(|| {
+        crate::validate::env_usize(
+            "SUPERTONIC_MAX_BATCH_TEXT_BYTES",
+            DEFAULT_MAX_BATCH_TEXT_BYTES,
+        )
+    })
 }
 
 fn check_batch_size(n: usize) -> Result<(), AppError> {
@@ -244,31 +251,32 @@ pub(crate) async fn batch_tts(
     // The batch loop is blocking (serialized inference + base64); run it once on
     // a blocking thread. The permit moves in so the slot stays held until the
     // whole batch finishes, even if the request times out.
-    let result_items = tokio::task::spawn_blocking(move || -> Result<Vec<BatchResultItem>, AppError> {
-        let _permit = permit;
-        let b64 = base64::engine::general_purpose::STANDARD;
-        let mut out = Vec::with_capacity(items.len());
-        for (index, item) in items.into_iter().enumerate() {
-            let params = SynthParams {
-                text: item.text,
-                lang: lang_or_auto(item.lang),
-                voice: item.voice,
-                total_steps: item.steps,
-                speed: item.speed,
-                silence_duration: item.silence_duration,
-                max_chunk_length: item.max_chunk_length,
-            };
-            let rendered = render(&engine, params, &response_format)?;
-            out.push(BatchResultItem {
-                index,
-                audio_base64: b64.encode(&rendered.bytes),
-                duration_seconds: rendered.duration,
-            });
-        }
-        Ok(out)
-    })
-    .await
-    .map_err(|e| AppError::from_join("batch synthesis task failed", e))??;
+    let result_items =
+        tokio::task::spawn_blocking(move || -> Result<Vec<BatchResultItem>, AppError> {
+            let _permit = permit;
+            let b64 = base64::engine::general_purpose::STANDARD;
+            let mut out = Vec::with_capacity(items.len());
+            for (index, item) in items.into_iter().enumerate() {
+                let params = SynthParams {
+                    text: item.text,
+                    lang: lang_or_auto(item.lang),
+                    voice: item.voice,
+                    total_steps: item.steps,
+                    speed: item.speed,
+                    silence_duration: item.silence_duration,
+                    max_chunk_length: item.max_chunk_length,
+                };
+                let rendered = render(&engine, params, &response_format)?;
+                out.push(BatchResultItem {
+                    index,
+                    audio_base64: b64.encode(&rendered.bytes),
+                    duration_seconds: rendered.duration,
+                });
+            }
+            Ok(out)
+        })
+        .await
+        .map_err(|e| AppError::from_join("batch synthesis task failed", e))??;
 
     Ok(Json(BatchResponse {
         sample_rate: state.engine.sample_rate(),
