@@ -15,7 +15,10 @@ const DEFAULT_FFMPEG_TIMEOUT_SECS: usize = 120;
 fn ffmpeg_timeout() -> Duration {
     static V: OnceLock<usize> = OnceLock::new();
     let secs = *V.get_or_init(|| {
-        crate::validate::env_usize("SUPERTONIC_FFMPEG_TIMEOUT_SECS", DEFAULT_FFMPEG_TIMEOUT_SECS)
+        crate::validate::env_usize(
+            "SUPERTONIC_FFMPEG_TIMEOUT_SECS",
+            DEFAULT_FFMPEG_TIMEOUT_SECS,
+        )
     });
     Duration::from_secs(secs as u64)
 }
@@ -111,7 +114,14 @@ fn ffmpeg_format(fmt: &str) -> Option<(&'static str, &'static str)> {
 fn ffmpeg_convert(wav: &[u8], ffmpeg_fmt: &str) -> Result<Vec<u8>, AudioError> {
     let mut child = Command::new("ffmpeg")
         .args([
-            "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-f", ffmpeg_fmt, "pipe:1",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            "pipe:0",
+            "-f",
+            ffmpeg_fmt,
+            "pipe:1",
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -247,7 +257,10 @@ mod tests {
     fn encode_media_types() {
         assert_eq!(encode(&[0.0], 24_000, "wav").unwrap().1, "audio/wav");
         // pcm is little-endian, so not the big-endian `audio/L16` MIME type.
-        assert_eq!(encode(&[0.0], 24_000, "pcm").unwrap().1, "application/octet-stream");
+        assert_eq!(
+            encode(&[0.0], 24_000, "pcm").unwrap().1,
+            "application/octet-stream"
+        );
     }
 
     #[test]

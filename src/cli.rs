@@ -13,7 +13,11 @@ use crate::engine::{Engine, SynthParams, ASSETS_DIR};
 use crate::voice_store::VoiceStore;
 
 #[derive(Parser)]
-#[command(name = "supertonic", version, about = "SuperTonic 3 TTS — HTTP server (default) and CLI")]
+#[command(
+    name = "supertonic",
+    version,
+    about = "SuperTonic 3 TTS — HTTP server (default) and CLI"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -210,9 +214,26 @@ mod tests {
     #[test]
     fn synth_applies_overrides() {
         let cli = parse(&[
-            "supertonic", "synth", "--text", "yo", "--voice", "F2", "--lang", "ko",
-            "--speed", "1.2", "--steps", "12", "--silence", "0.5", "--format", "pcm",
-            "--out", "x.pcm", "--max-chunk-length", "300",
+            "supertonic",
+            "synth",
+            "--text",
+            "yo",
+            "--voice",
+            "F2",
+            "--lang",
+            "ko",
+            "--speed",
+            "1.2",
+            "--steps",
+            "12",
+            "--silence",
+            "0.5",
+            "--format",
+            "pcm",
+            "--out",
+            "x.pcm",
+            "--max-chunk-length",
+            "300",
         ])
         .unwrap();
         let Some(Command::Synth(a)) = cli.command else {

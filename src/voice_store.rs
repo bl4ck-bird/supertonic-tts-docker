@@ -188,7 +188,9 @@ impl VoiceStore {
     /// existing voice of that name untouched. Returns the loaded `Style`.
     fn write_and_load(dir: &Path, name: &str, json: &str) -> Result<Style, EngineError> {
         if !is_safe_voice_name(name) {
-            return Err(EngineError::BadRequest(format!("invalid voice name: {name}")));
+            return Err(EngineError::BadRequest(format!(
+                "invalid voice name: {name}"
+            )));
         }
         // In-process guard against a same-name import race; cross-process callers
         // rely on the single-instance assumption.
@@ -214,8 +216,9 @@ impl VoiceStore {
             .map_err(|e| EngineError::Internal(format!("failed to write voice file: {e}")))?;
         match load_voice_style(&[tmp.to_string_lossy().into_owned()], false) {
             Ok(style) => {
-                std::fs::rename(&tmp, &path)
-                    .map_err(|e| EngineError::Internal(format!("failed to save voice file: {e}")))?;
+                std::fs::rename(&tmp, &path).map_err(|e| {
+                    EngineError::Internal(format!("failed to save voice file: {e}"))
+                })?;
                 Ok(style)
             }
             Err(e) => {
@@ -239,7 +242,9 @@ mod tests {
 
     #[test]
     fn rejects_odd_but_non_traversing_names() {
-        for bad in [".", ".hidden", " ", "a b", "a\nb", "voice!", "naïve", "a\0b"] {
+        for bad in [
+            ".", ".hidden", " ", "a b", "a\nb", "voice!", "naïve", "a\0b",
+        ] {
             assert!(!is_safe_voice_name(bad), "{bad:?} should be rejected");
         }
     }
@@ -303,7 +308,10 @@ mod tests {
         assert!(!dir.join("bad.json").exists(), "no file should be written");
         // No temp left behind either.
         let leftovers: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().collect();
-        assert!(leftovers.is_empty(), "no .part temp should leak: {leftovers:?}");
+        assert!(
+            leftovers.is_empty(),
+            "no .part temp should leak: {leftovers:?}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -329,15 +337,30 @@ mod tests {
 
         // Both the server (`import`) and the CLI (`import_to`) refuse to overwrite
         // it, leaving the file untouched.
-        assert!(store.import("M1", &doc).is_err(), "server must not overwrite");
-        assert!(VoiceStore::import_to(&dir, "M1", &doc).is_err(), "CLI must not overwrite");
+        assert!(
+            store.import("M1", &doc).is_err(),
+            "server must not overwrite"
+        );
+        assert!(
+            VoiceStore::import_to(&dir, "M1", &doc).is_err(),
+            "CLI must not overwrite"
+        );
         assert_eq!(std::fs::read_to_string(&existing).unwrap(), "EXISTING");
 
         // A new name imports; re-importing it (now existing) is then refused too —
         // every already-present voice is protected, not just presets.
-        assert!(store.import("custom1", &doc).is_ok(), "new voice should import");
-        assert!(store.import("custom1", &doc).is_err(), "existing custom is protected");
-        assert!(VoiceStore::import_to(&dir, "custom1", &doc).is_err(), "CLI sees it too");
+        assert!(
+            store.import("custom1", &doc).is_ok(),
+            "new voice should import"
+        );
+        assert!(
+            store.import("custom1", &doc).is_err(),
+            "existing custom is protected"
+        );
+        assert!(
+            VoiceStore::import_to(&dir, "custom1", &doc).is_err(),
+            "CLI sees it too"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -95,8 +95,15 @@ impl Engine {
         let mut tts = lock(&self.tts);
 
         let call_one = |tts: &mut TextToSpeech, text: &str| {
-            tts.call(text, &params.lang, &style, c.total_steps, c.speed, c.silence_duration)
-                .map_err(|e| EngineError::Internal(format!("synthesis failed: {e}")))
+            tts.call(
+                text,
+                &params.lang,
+                &style,
+                c.total_steps,
+                c.speed,
+                c.silence_duration,
+            )
+            .map_err(|e| EngineError::Internal(format!("synthesis failed: {e}")))
         };
 
         match c.max_chunk_length {

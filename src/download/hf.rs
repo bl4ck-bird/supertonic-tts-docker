@@ -117,7 +117,9 @@ pub(crate) fn list_dir(
 fn parse_tree(json: &str) -> Result<Vec<TreeFile>, DownloadError> {
     let value: serde_json::Value =
         serde_json::from_str(json).map_err(|e| err(format!("tree json: {e}")))?;
-    let array = value.as_array().ok_or_else(|| err("tree is not an array"))?;
+    let array = value
+        .as_array()
+        .ok_or_else(|| err("tree is not an array"))?;
     let mut files = Vec::new();
     for item in array {
         if item.get("type").and_then(|t| t.as_str()) != Some("file") {

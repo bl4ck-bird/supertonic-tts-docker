@@ -207,7 +207,10 @@ fn fetch(
         .to_string_lossy();
     let tmp = parent.join(format!("{name}.part"));
 
-    let url = format!("{HF_HOST}/{}/resolve/{}/{}", cfg.repo, cfg.revision, file.path);
+    let url = format!(
+        "{HF_HOST}/{}/resolve/{}/{}",
+        cfg.repo, cfg.revision, file.path
+    );
     eprintln!("  downloading {}", file.path);
     let mut resp = agent
         .get(&url)
@@ -223,7 +226,8 @@ fn fetch(
         .ok_or_else(|| err(format!("{}: listing has no integrity hash", file.path)))?;
 
     let mut reader = resp.body_mut().as_reader();
-    let mut out = fs::File::create(&tmp).map_err(|e| err(format!("create {}: {e}", tmp.display())))?;
+    let mut out =
+        fs::File::create(&tmp).map_err(|e| err(format!("create {}: {e}", tmp.display())))?;
     let mut buf = vec![0u8; CHUNK];
     let mut written: u64 = 0;
     // Stop a runaway response (hostile/misconfigured repo) from filling the disk.
@@ -246,11 +250,13 @@ fn fetch(
         out.write_all(&buf[..n])
             .map_err(|e| err(format!("write {}: {e}", tmp.display())))?;
     }
-    out.flush().map_err(|e| err(format!("flush {}: {e}", tmp.display())))?;
+    out.flush()
+        .map_err(|e| err(format!("flush {}: {e}", tmp.display())))?;
     // fsync before the rename publishes the file: a host crash could otherwise
     // leave a size-correct file with unwritten (zero) blocks that the size-only
     // reuse check would trust on the next start.
-    out.sync_all().map_err(|e| err(format!("sync {}: {e}", tmp.display())))?;
+    out.sync_all()
+        .map_err(|e| err(format!("sync {}: {e}", tmp.display())))?;
     drop(out);
 
     // A known byte count that doesn't match means a truncated download; never
@@ -312,7 +318,10 @@ mod tests {
         // A normal writable dir passes and leaves no probe behind.
         assert!(ensure_writable(&dir).is_ok());
         let leftovers: Vec<_> = fs::read_dir(&dir).unwrap().flatten().collect();
-        assert!(leftovers.is_empty(), "probe must be cleaned up: {leftovers:?}");
+        assert!(
+            leftovers.is_empty(),
+            "probe must be cleaned up: {leftovers:?}"
+        );
 
         // Make it read-only and assert the denial — but only when the OS actually
         // denies the write (root ignores DAC permissions, so skip the assert there).
@@ -320,7 +329,10 @@ mod tests {
         perms.set_mode(0o555);
         fs::set_permissions(&dir, perms).unwrap();
         if fs::write(dir.join(".probe-check"), b"").is_err() {
-            assert!(ensure_writable(&dir).is_err(), "read-only dir must be rejected");
+            assert!(
+                ensure_writable(&dir).is_err(),
+                "read-only dir must be rejected"
+            );
         } else {
             let _ = fs::remove_file(dir.join(".probe-check"));
         }

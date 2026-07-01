@@ -41,8 +41,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: stable # SHA pin can't derive the channel from the ref
-          components: clippy
+          components: clippy, rustfmt
 
+      # Style gate. helper.rs is opted out via #[rustfmt::skip] at its mod
+      # declaration (vendored verbatim), matching its clippy::all suppression.
+      - run: cargo fmt --check
       - run: cargo test --locked --bin supertonic
       # Gate on warnings: our code is clippy-clean and the vendored helper.rs is
       # suppressed at its `mod` declaration, so any new warning fails the build.
