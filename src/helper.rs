@@ -807,12 +807,26 @@ pub fn load_voice_style(voice_style_paths: &[String], verbose: bool) -> Result<S
 }
 
 /// Intra-op thread count from SUPERTONIC_THREADS, or None to keep the ONNX
-/// Runtime default (every physical core). Zero/unparseable values are ignored.
+/// Runtime default (every physical core). Unset/empty is silent; a set but
+/// malformed value (unparseable or zero) warns instead of being dropped quietly.
 fn intra_threads_from_env() -> Option<usize> {
-    std::env::var("SUPERTONIC_THREADS")
-        .ok()
-        .and_then(|v| v.trim().parse::<usize>().ok())
-        .filter(|&n| n > 0)
+    let raw = match std::env::var("SUPERTONIC_THREADS") {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    match trimmed.parse::<usize>() {
+        Ok(n) if n > 0 => Some(n),
+        _ => {
+            eprintln!(
+                "warning: SUPERTONIC_THREADS={raw:?} is not a positive integer; using all cores"
+            );
+            None
+        }
+    }
 }
 
 /// A `Session::builder()` with the intra-op thread pool bounded when configured.

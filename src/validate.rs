@@ -26,13 +26,36 @@ pub(crate) fn validate(params: &SynthParams) -> Result<Clamped, EngineError> {
 }
 
 /// Read a positive `usize` from the environment, falling back to `default` when
-/// unset, empty, unparseable, or zero. Shared by the input caps.
+/// unset or empty. A set-but-malformed value (unparseable or zero) also falls
+/// back, but warns so a typo is not silently ignored. Shared by the input caps.
 pub(crate) fn env_usize(key: &str, default: usize) -> usize {
-    std::env::var(key)
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .filter(|&n| n > 0)
-        .unwrap_or(default)
+    match std::env::var(key) {
+        Err(_) => default,
+        Ok(v) if v.is_empty() => default,
+        Ok(v) => match v.parse::<usize>() {
+            Ok(n) if n > 0 => n,
+            _ => {
+                eprintln!("warning: {key}={v:?} is not a positive integer; using {default}");
+                default
+            }
+        },
+    }
+}
+
+/// Read a `u16` port from the environment, falling back to `default` when unset
+/// or empty. A set-but-unparseable value falls back with a warning.
+pub(crate) fn env_port(key: &str, default: u16) -> u16 {
+    match std::env::var(key) {
+        Err(_) => default,
+        Ok(v) if v.is_empty() => default,
+        Ok(v) => match v.parse::<u16>() {
+            Ok(p) => p,
+            Err(_) => {
+                eprintln!("warning: {key}={v:?} is not a valid port; using {default}");
+                default
+            }
+        },
+    }
 }
 
 /// Default per-utterance input cap in bytes. Synthesized audio dwarfs the input
@@ -142,6 +165,22 @@ mod tests {
         std::env::set_var("SUPERTONIC_TEST_CAP", "7");
         assert_eq!(env_usize("SUPERTONIC_TEST_CAP", 42), 7);
         std::env::remove_var("SUPERTONIC_TEST_CAP");
+    }
+
+    #[test]
+    fn env_port_falls_back_on_invalid() {
+        // Unset -> default.
+        assert_eq!(env_port("SUPERTONIC_DEFINITELY_UNSET_PORT_XYZ", 8080), 8080);
+        // Empty / unparseable / overflow -> default; a valid port parses.
+        std::env::set_var("SUPERTONIC_TEST_PORT", "");
+        assert_eq!(env_port("SUPERTONIC_TEST_PORT", 8080), 8080);
+        std::env::set_var("SUPERTONIC_TEST_PORT", "abc");
+        assert_eq!(env_port("SUPERTONIC_TEST_PORT", 8080), 8080);
+        std::env::set_var("SUPERTONIC_TEST_PORT", "70000");
+        assert_eq!(env_port("SUPERTONIC_TEST_PORT", 8080), 8080);
+        std::env::set_var("SUPERTONIC_TEST_PORT", "9000");
+        assert_eq!(env_port("SUPERTONIC_TEST_PORT", 8080), 9000);
+        std::env::remove_var("SUPERTONIC_TEST_PORT");
     }
 
     #[test]

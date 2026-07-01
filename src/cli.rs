@@ -155,10 +155,7 @@ pub fn run_import(args: ImportArgs) -> ExitCode {
 /// Probe `http://127.0.0.1:<port>/v1/health`, the Docker HEALTHCHECK command.
 /// Exit 0 only on a 2xx response.
 pub fn run_healthcheck() -> ExitCode {
-    let port = std::env::var("SUPERTONIC_PORT")
-        .ok()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(8080);
+    let port = crate::validate::env_port("SUPERTONIC_PORT", 8080);
     let url = format!("http://127.0.0.1:{port}/v1/health");
     match ureq::get(&url).call() {
         Ok(resp) if resp.status().is_success() => ExitCode::SUCCESS,

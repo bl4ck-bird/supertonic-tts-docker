@@ -66,10 +66,7 @@ fn run_server() -> ExitCode {
 async fn serve() -> ExitCode {
     tracing_subscriber::fmt::init();
 
-    let port: u16 = std::env::var("SUPERTONIC_PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(8080);
+    let port = validate::env_port("SUPERTONIC_PORT", 8080);
 
     // The server needs both the onnx model and the voice styles present.
     if let Err(e) =
