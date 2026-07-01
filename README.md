@@ -116,7 +116,7 @@ the full flag set.
 | Variable | Description |
 | --- | --- |
 | `SUPERTONIC_PORT` | Port the server binds (default `8080`). Under Compose it is also the published host port but is not injected into the container, so the container there stays on 8080. |
-| `SUPERTONIC_THREADS` | `OMP_NUM_THREADS` for ONNX Runtime. |
+| `SUPERTONIC_THREADS` | ONNX Runtime intra-op threads (CPU parallelism per model). Unset = all physical cores; set to bound CPU use on shared hosts. Also exported as `OMP_NUM_THREADS` for OpenMP-linked runtimes. |
 | `SUPERTONIC_HF_REPO` / `SUPERTONIC_HF_REVISION` | Model repo / revision (default: a pinned commit; set to `main` or a tag to track upstream). |
 | `SUPERTONIC_MAX_TEXT_BYTES` | Per-utterance input cap (default `4096`). |
 | `SUPERTONIC_MAX_BATCH_TEXT_BYTES` | Per-batch total input cap (default `50000`). |

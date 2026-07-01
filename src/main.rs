@@ -28,8 +28,11 @@ use cli::{Cli, Command};
 use engine::Engine;
 
 fn main() -> ExitCode {
-    // Map SUPERTONIC_THREADS to OMP_NUM_THREADS (onnxruntime reads it on OpenMP
-    // builds). Must stay here: before any thread spawns or onnxruntime loads.
+    // Primary thread control is with_intra_threads on each session (see
+    // helper::session_builder); the shipped load-dynamic onnxruntime has no
+    // OpenMP so OMP_NUM_THREADS alone is ignored. Kept as a fallback for
+    // OpenMP-linked runtimes. Must stay here: before any thread spawns or
+    // onnxruntime loads.
     if let Ok(threads) = std::env::var("SUPERTONIC_THREADS") {
         if !threads.is_empty() {
             std::env::set_var("OMP_NUM_THREADS", threads);
